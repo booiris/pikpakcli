@@ -1,6 +1,7 @@
 package download
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -20,11 +21,18 @@ var DownloadCmd = &cobra.Command{
 		err := p.Login()
 		if err != nil {
 			logrus.Errorln("Login Failed:", err)
+			os.Exit(1)
 		}
 		if len(args) > 0 {
-			downloadFile(&p, args)
+			err := downloadFile(&p, args)
+			if err != nil {
+				os.Exit(2)
+			}
 		} else {
-			downloadFolder(&p)
+			err := downloadFolder(&p)
+			if err != nil {
+				os.Exit(2)
+			}
 		}
 	},
 }
@@ -65,14 +73,14 @@ func init() {
 }
 
 // Downloads all files in the specified directory
-func downloadFolder(p *pikpak.PikPak) {
+func downloadFolder(p *pikpak.PikPak) error {
 	base := filepath.Base(folder)
 	var err error
 	if parentId == "" {
 		parentId, err = p.GetPathFolderId(folder)
 		if err != nil {
 			logrus.Errorln("Get Parent Folder Id Failed:", err)
-			return
+			return errors.New("error")
 		}
 
 	}
@@ -113,7 +121,7 @@ func downloadFolder(p *pikpak.PikPak) {
 		err := utils.CreateDirIfNotExist(collectStat[i].output)
 		if err != nil {
 			logrus.Errorln("Create output directory failed:", err)
-			return
+			return errors.New("error")
 		}
 		statCh <- collectStat[i]
 	}
@@ -127,6 +135,7 @@ func downloadFolder(p *pikpak.PikPak) {
 	for i := 0; i < len(collectStat); i += 1 {
 		<-fileDone
 	}
+	return nil
 }
 
 func recursive(p *pikpak.PikPak, collectWarpFile *[]warpStat, parentId string, parentPath string) {
@@ -149,20 +158,20 @@ func recursive(p *pikpak.PikPak, collectWarpFile *[]warpStat, parentId string, p
 	}
 }
 
-func downloadFile(p *pikpak.PikPak, args []string) {
+func downloadFile(p *pikpak.PikPak, args []string) error {
 	var err error
 	if parentId == "" {
 		parentId, err = p.GetPathFolderId(folder)
 		if err != nil {
 			logrus.Errorln("get folder failed:", err)
-			return
+			return errors.New("error")
 		}
 	}
 
 	// if output not exists then create.
 	if err := utils.CreateDirIfNotExist(output); err != nil {
 		logrus.Errorln("Create output directory failed:", err)
-		return
+		return errors.New("error")
 	}
 
 	sendCh := make(chan warpFile, 1)
@@ -193,7 +202,7 @@ func downloadFile(p *pikpak.PikPak, args []string) {
 		<-receiveCh
 	}
 	close(receiveCh)
-
+	return nil
 }
 
 func download(inCh <-chan warpFile, out chan<- struct{}) {

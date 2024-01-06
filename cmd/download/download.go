@@ -91,7 +91,7 @@ func downloadFolder(p *pikpak.PikPak) error {
 	statDone := make(chan struct{})
 
 	fileCh := make(chan warpFile, len(collectStat))
-	fileDone := make(chan struct{})
+	fileDone := make(chan error)
 
 	for i := 0; i < 4; i += 1 {
 		go func(fileCh chan<- warpFile, statCh <-chan warpStat, statDone chan<- struct{}) {
@@ -133,7 +133,10 @@ func downloadFolder(p *pikpak.PikPak) error {
 	close(statDone)
 
 	for i := 0; i < len(collectStat); i += 1 {
-		<-fileDone
+		err := <-fileDone
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -175,7 +178,7 @@ func downloadFile(p *pikpak.PikPak, args []string) error {
 	}
 
 	sendCh := make(chan warpFile, 1)
-	receiveCh := make(chan struct{}, len(args))
+	receiveCh := make(chan error, len(args))
 
 	for i := 0; i < count; i++ {
 		go download(sendCh, receiveCh)
@@ -199,13 +202,16 @@ func downloadFile(p *pikpak.PikPak, args []string) error {
 	}
 	close(sendCh)
 	for i := 0; i < len(args); i++ {
-		<-receiveCh
+		err := <-receiveCh
+		if err != nil {
+			return err
+		}
 	}
 	close(receiveCh)
 	return nil
 }
 
-func download(inCh <-chan warpFile, out chan<- struct{}) {
+func download(inCh <-chan warpFile, out chan<- error) {
 	for {
 		warp, ok := <-inCh
 		if !ok {
@@ -215,25 +221,25 @@ func download(inCh <-chan warpFile, out chan<- struct{}) {
 		exist, err := utils.Exists(path)
 		if err != nil {
 			logrus.Errorln("Access", path, "Failed:", err)
-			out <- struct{}{}
+			out <- err
 			continue
 		}
 		flag := path + ".pikpakclidownload"
 		hasFlag, err := utils.Exists(flag)
 		if err != nil {
 			logrus.Errorln("Access", flag, "Failed:", err)
-			out <- struct{}{}
+			out <- err
 			continue
 		}
 		if exist && !hasFlag {
 			logrus.Infoln("Skip downloaded file", warp.f.Name)
-			out <- struct{}{}
+			out <- err
 			continue
 		}
 		err = utils.TouchFile(flag)
 		if err != nil {
 			logrus.Errorln("Create flag file", flag, "Failed:", err)
-			out <- struct{}{}
+			out <- err
 			continue
 		}
 		err = warp.f.Download(path)
@@ -246,6 +252,6 @@ func download(inCh <-chan warpFile, out chan<- struct{}) {
 				logrus.Warnln("Remove flag file", flag, "Failed:", err)
 			}
 		}
-		out <- struct{}{}
+		out <- nil
 	}
 }

@@ -132,11 +132,12 @@ func downloadFolder(p *pikpak.PikPak) error {
 	}
 	close(statDone)
 
+	err = nil
 	for i := 0; i < len(collectStat); i += 1 {
-		err := <-fileDone
-		if err != nil {
-			return err
-		}
+		err = <-fileDone
+	}
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -201,11 +202,12 @@ func downloadFile(p *pikpak.PikPak, args []string) error {
 		}
 	}
 	close(sendCh)
+	err = nil
 	for i := 0; i < len(args); i++ {
-		err := <-receiveCh
-		if err != nil {
-			return err
-		}
+		err = <-receiveCh
+	}
+	if err != nil {
+		return err
 	}
 	close(receiveCh)
 	return nil
@@ -221,30 +223,28 @@ func download(inCh <-chan warpFile, out chan<- error) {
 		exist, err := utils.Exists(path)
 		if err != nil {
 			logrus.Errorln("Access", path, "Failed:", err)
-			out <- err
 			continue
 		}
 		flag := path + ".pikpakclidownload"
 		hasFlag, err := utils.Exists(flag)
 		if err != nil {
 			logrus.Errorln("Access", flag, "Failed:", err)
-			out <- err
 			continue
 		}
 		if exist && !hasFlag {
 			logrus.Infoln("Skip downloaded file", warp.f.Name)
-			out <- err
 			continue
 		}
 		err = utils.TouchFile(flag)
 		if err != nil {
 			logrus.Errorln("Create flag file", flag, "Failed:", err)
-			out <- err
 			continue
 		}
 		err = warp.f.Download(path)
 		if err != nil {
 			logrus.Errorln("Download", warp.f.Name, "Failed:", err)
+			out <- err
+			return
 		} else {
 			logrus.Infoln("Download", warp.f.Name, "Success")
 			err = os.Remove(flag)
